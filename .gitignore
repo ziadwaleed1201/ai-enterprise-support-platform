@@ -1,0 +1,36 @@
+# IDE
+.idea/
+.vscode/
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Java / Spring Boot
+backend/target/
+*.class
+*.jar
+*.war
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*
+
+# Python
+ai-service/__pycache__/
+ai-service/.venv/
+ai-service/venv/
+*.pyc
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+
+# Misc
+coverage/
+dist/
