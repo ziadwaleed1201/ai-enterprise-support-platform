@@ -34,3 +34,6 @@ ai-service/venv/
 # Misc
 coverage/
 dist/
+
+# Ticket attachments
+uploads/
