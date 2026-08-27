@@ -51,13 +51,19 @@ public class Ticket {
     @JoinColumn(name = "assigned_agent_id")
     private User assignedAgent;
 
+    private LocalDateTime responseDueAt;
+
+    private LocalDateTime resolutionDueAt;
+
+    private LocalDateTime firstRespondedAt;
+
+    private LocalDateTime resolvedAt;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-
-    private LocalDateTime resolvedAt;
 
     @PrePersist
     protected void onCreate() {

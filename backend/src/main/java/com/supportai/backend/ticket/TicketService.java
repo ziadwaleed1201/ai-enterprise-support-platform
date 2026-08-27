@@ -46,18 +46,31 @@ public class TicketService {
             );
         }
 
+        TicketPriority priority =
+                request.getPriority() != null
+                        ? request.getPriority()
+                        : TicketPriority.MEDIUM;
+
+        LocalDateTime now = LocalDateTime.now();
+
         Ticket ticket = Ticket.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .department(department)
                 .category(category)
                 .createdBy(user)
-                .priority(
-                        request.getPriority() != null
-                                ? request.getPriority()
-                                : TicketPriority.MEDIUM
-                )
+                .priority(priority)
                 .status(TicketStatus.NEW)
+                .responseDueAt(
+                        now.plusHours(
+                                getResponseSlaHours(priority)
+                        )
+                )
+                .resolutionDueAt(
+                        now.plusHours(
+                                getResolutionSlaHours(priority)
+                        )
+                )
                 .build();
 
         Ticket savedTicket = ticketRepository.save(ticket);
@@ -72,7 +85,9 @@ public class TicketService {
         return mapToResponse(savedTicket);
     }
 
-    public List<TicketResponse> getMyTickets(String userEmail) {
+    public List<TicketResponse> getMyTickets(
+            String userEmail
+    ) {
 
         return ticketRepository.findByCreatedByEmail(userEmail)
                 .stream()
@@ -91,23 +106,7 @@ public class TicketService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        boolean isOwner =
-                ticket.getCreatedBy().getEmail().equals(userEmail);
-
-        boolean isAssignedAgent =
-                ticket.getAssignedAgent() != null
-                        && ticket.getAssignedAgent()
-                        .getEmail()
-                        .equals(userEmail);
-
-        boolean isAdmin =
-                user.getRole() == Role.ADMIN;
-
-        if (!isOwner && !isAssignedAgent && !isAdmin) {
-            throw new RuntimeException(
-                    "You are not allowed to view this ticket"
-            );
-        }
+        validateTicketAccess(ticket, user);
 
         return mapToResponse(ticket);
     }
@@ -139,12 +138,15 @@ public class TicketService {
             ticket.setStatus(TicketStatus.OPEN);
         }
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
 
         String details;
 
         if (previousAgent == null) {
-            details = "Ticket assigned to " + agent.getEmail();
+            details =
+                    "Ticket assigned to "
+                            + agent.getEmail();
         } else {
             details =
                     "Ticket reassigned from "
@@ -164,47 +166,62 @@ public class TicketService {
     }
 
     public TicketResponse updateStatus(
-        Long ticketId,
-        TicketStatus status,
-        String userEmail
-) {
+            Long ticketId,
+            TicketStatus status,
+            String userEmail
+    ) {
 
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new RuntimeException("Ticket not found"));
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
 
-    User user = userRepository.findByEmail(userEmail)
-            .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-    TicketStatus previousStatus = ticket.getStatus();
+        TicketStatus previousStatus =
+                ticket.getStatus();
 
-    ticket.setStatus(status);
+        ticket.setStatus(status);
 
-    if (status == TicketStatus.RESOLVED) {
-        ticket.setResolvedAt(LocalDateTime.now());
-    } else {
-        ticket.setResolvedAt(null);
+        if (ticket.getFirstRespondedAt() == null
+                && (user.getRole() == Role.SUPPORT_AGENT
+                || user.getRole() == Role.ADMIN)
+                && status != TicketStatus.NEW) {
+
+            ticket.setFirstRespondedAt(
+                    LocalDateTime.now()
+            );
+        }
+
+        if (status == TicketStatus.RESOLVED) {
+            ticket.setResolvedAt(
+                    LocalDateTime.now()
+            );
+        } else if (status != TicketStatus.CLOSED) {
+            ticket.setResolvedAt(null);
+        }
+
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        recordHistory(
+                savedTicket,
+                user,
+                "STATUS_CHANGED",
+                "Status changed from "
+                        + previousStatus
+                        + " to "
+                        + status
+        );
+
+        return mapToResponse(savedTicket);
     }
-
-    Ticket savedTicket = ticketRepository.save(ticket);
-
-    recordHistory(
-            savedTicket,
-            user,
-            "STATUS_CHANGED",
-            "Status changed from "
-                    + previousStatus
-                    + " to "
-                    + status
-    );
-
-    return mapToResponse(savedTicket);
-}
 
     public List<TicketResponse> getAssignedTickets(
             String agentEmail
     ) {
 
-        return ticketRepository.findByAssignedAgentEmail(agentEmail)
+        return ticketRepository
+                .findByAssignedAgentEmail(agentEmail)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -222,41 +239,48 @@ public class TicketService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        boolean isOwner =
-                ticket.getCreatedBy().getEmail().equals(userEmail);
+        validateTicketAccess(ticket, user);
 
-        boolean isAssignedAgent =
-                ticket.getAssignedAgent() != null
-                        && ticket.getAssignedAgent()
-                        .getEmail()
-                        .equals(userEmail);
-
-        boolean isAdmin =
-                user.getRole() == Role.ADMIN;
-
-        if (!isOwner && !isAssignedAgent && !isAdmin) {
-            throw new RuntimeException(
-                    "You are not allowed to comment on this ticket"
-            );
-        }
-
-        TicketComment comment = TicketComment.builder()
-                .ticket(ticket)
-                .author(user)
-                .message(request.getMessage())
-                .build();
+        TicketComment comment =
+                TicketComment.builder()
+                        .ticket(ticket)
+                        .author(user)
+                        .message(request.getMessage())
+                        .build();
 
         TicketComment savedComment =
                 ticketCommentRepository.save(comment);
+
+        if (ticket.getFirstRespondedAt() == null
+                && (user.getRole() == Role.SUPPORT_AGENT
+                || user.getRole() == Role.ADMIN)) {
+
+            ticket.setFirstRespondedAt(
+                    LocalDateTime.now()
+            );
+
+            ticketRepository.save(ticket);
+
+            recordHistory(
+                    ticket,
+                    user,
+                    "FIRST_RESPONSE",
+                    "First support response provided by "
+                            + user.getEmail()
+            );
+        }
 
         recordHistory(
                 ticket,
                 user,
                 "COMMENT_ADDED",
-                "Comment added by " + user.getEmail()
+                "Comment added by "
+                        + user.getEmail()
         );
 
-        return mapCommentToResponse(savedComment);
+        return mapCommentToResponse(
+                savedComment
+        );
     }
 
     public List<TicketCommentResponse> getComments(
@@ -270,23 +294,7 @@ public class TicketService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        boolean isOwner =
-                ticket.getCreatedBy().getEmail().equals(userEmail);
-
-        boolean isAssignedAgent =
-                ticket.getAssignedAgent() != null
-                        && ticket.getAssignedAgent()
-                        .getEmail()
-                        .equals(userEmail);
-
-        boolean isAdmin =
-                user.getRole() == Role.ADMIN;
-
-        if (!isOwner && !isAssignedAgent && !isAdmin) {
-            throw new RuntimeException(
-                    "You are not allowed to view these comments"
-            );
-        }
+        validateTicketAccess(ticket, user);
 
         return ticketCommentRepository
                 .findByTicketIdOrderByCreatedAtAsc(ticketId)
@@ -306,23 +314,7 @@ public class TicketService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        boolean isOwner =
-                ticket.getCreatedBy().getEmail().equals(userEmail);
-
-        boolean isAssignedAgent =
-                ticket.getAssignedAgent() != null
-                        && ticket.getAssignedAgent()
-                        .getEmail()
-                        .equals(userEmail);
-
-        boolean isAdmin =
-                user.getRole() == Role.ADMIN;
-
-        if (!isOwner && !isAssignedAgent && !isAdmin) {
-            throw new RuntimeException(
-                    "You are not allowed to view this ticket history"
-            );
-        }
+        validateTicketAccess(ticket, user);
 
         return ticketHistoryRepository
                 .findByTicketIdOrderByCreatedAtAsc(ticketId)
@@ -334,13 +326,126 @@ public class TicketService {
                                 .details(history.getDetails())
                                 .performedBy(
                                         history.getPerformedBy() != null
-                                                ? history.getPerformedBy().getEmail()
+                                                ? history.getPerformedBy()
+                                                .getEmail()
                                                 : null
                                 )
-                                .createdAt(history.getCreatedAt())
+                                .createdAt(
+                                        history.getCreatedAt()
+                                )
                                 .build()
                 )
                 .toList();
+    }
+
+    private void validateTicketAccess(
+            Ticket ticket,
+            User user
+    ) {
+
+        String userEmail =
+                user.getEmail();
+
+        boolean isOwner =
+                ticket.getCreatedBy()
+                        .getEmail()
+                        .equals(userEmail);
+
+        boolean isAssignedAgent =
+                ticket.getAssignedAgent() != null
+                        && ticket.getAssignedAgent()
+                        .getEmail()
+                        .equals(userEmail);
+
+        boolean isAdmin =
+                user.getRole() == Role.ADMIN;
+
+        if (!isOwner
+                && !isAssignedAgent
+                && !isAdmin) {
+
+            throw new RuntimeException(
+                    "You are not allowed to access this ticket"
+            );
+        }
+    }
+
+    private long getResponseSlaHours(
+            TicketPriority priority
+    ) {
+
+        return switch (priority) {
+
+            case LOW -> 8;
+
+            case MEDIUM -> 4;
+
+            case HIGH -> 2;
+
+            case CRITICAL -> 1;
+        };
+    }
+
+    private long getResolutionSlaHours(
+            TicketPriority priority
+    ) {
+
+        return switch (priority) {
+
+            case LOW -> 72;
+
+            case MEDIUM -> 48;
+
+            case HIGH -> 24;
+
+            case CRITICAL -> 8;
+        };
+    }
+
+    private boolean isResponseOverdue(
+            Ticket ticket
+    ) {
+
+        if (ticket.getResponseDueAt() == null) {
+            return false;
+        }
+
+        if (ticket.getFirstRespondedAt() != null) {
+            return ticket.getFirstRespondedAt()
+                    .isAfter(
+                            ticket.getResponseDueAt()
+                    );
+        }
+
+        return LocalDateTime.now()
+                .isAfter(
+                        ticket.getResponseDueAt()
+                );
+    }
+
+    private boolean isResolutionOverdue(
+            Ticket ticket
+    ) {
+
+        if (ticket.getResolutionDueAt() == null) {
+            return false;
+        }
+
+        if (ticket.getResolvedAt() != null) {
+            return ticket.getResolvedAt()
+                    .isAfter(
+                            ticket.getResolutionDueAt()
+                    );
+        }
+
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            return false;
+        }
+
+        return LocalDateTime.now()
+                .isAfter(
+                        ticket.getResolutionDueAt()
+                );
     }
 
     private TicketResponse mapToResponse(
@@ -350,21 +455,61 @@ public class TicketService {
         return TicketResponse.builder()
                 .id(ticket.getId())
                 .title(ticket.getTitle())
-                .description(ticket.getDescription())
+                .description(
+                        ticket.getDescription()
+                )
                 .status(ticket.getStatus())
                 .priority(ticket.getPriority())
-                .departmentId(ticket.getDepartment().getId())
-                .departmentName(ticket.getDepartment().getName())
-                .categoryId(ticket.getCategory().getId())
-                .categoryName(ticket.getCategory().getName())
-                .createdBy(ticket.getCreatedBy().getEmail())
+                .departmentId(
+                        ticket.getDepartment()
+                                .getId()
+                )
+                .departmentName(
+                        ticket.getDepartment()
+                                .getName()
+                )
+                .categoryId(
+                        ticket.getCategory()
+                                .getId()
+                )
+                .categoryName(
+                        ticket.getCategory()
+                                .getName()
+                )
+                .createdBy(
+                        ticket.getCreatedBy()
+                                .getEmail()
+                )
                 .assignedAgent(
                         ticket.getAssignedAgent() != null
-                                ? ticket.getAssignedAgent().getEmail()
+                                ? ticket.getAssignedAgent()
+                                .getEmail()
                                 : null
                 )
-                .createdAt(ticket.getCreatedAt())
-                .updatedAt(ticket.getUpdatedAt())
+                .responseDueAt(
+                        ticket.getResponseDueAt()
+                )
+                .resolutionDueAt(
+                        ticket.getResolutionDueAt()
+                )
+                .firstRespondedAt(
+                        ticket.getFirstRespondedAt()
+                )
+                .resolvedAt(
+                        ticket.getResolvedAt()
+                )
+                .responseOverdue(
+                        isResponseOverdue(ticket)
+                )
+                .resolutionOverdue(
+                        isResolutionOverdue(ticket)
+                )
+                .createdAt(
+                        ticket.getCreatedAt()
+                )
+                .updatedAt(
+                        ticket.getUpdatedAt()
+                )
                 .build();
     }
 
@@ -375,8 +520,13 @@ public class TicketService {
         return TicketCommentResponse.builder()
                 .id(comment.getId())
                 .message(comment.getMessage())
-                .authorEmail(comment.getAuthor().getEmail())
-                .createdAt(comment.getCreatedAt())
+                .authorEmail(
+                        comment.getAuthor()
+                                .getEmail()
+                )
+                .createdAt(
+                        comment.getCreatedAt()
+                )
                 .build();
     }
 
@@ -387,12 +537,13 @@ public class TicketService {
             String details
     ) {
 
-        TicketHistory history = TicketHistory.builder()
-                .ticket(ticket)
-                .performedBy(performedBy)
-                .action(action)
-                .details(details)
-                .build();
+        TicketHistory history =
+                TicketHistory.builder()
+                        .ticket(ticket)
+                        .performedBy(performedBy)
+                        .action(action)
+                        .details(details)
+                        .build();
 
         ticketHistoryRepository.save(history);
     }

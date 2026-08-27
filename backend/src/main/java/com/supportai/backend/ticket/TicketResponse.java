@@ -12,6 +12,7 @@ public class TicketResponse {
     private Long id;
     private String title;
     private String description;
+
     private TicketStatus status;
     private TicketPriority priority;
 
@@ -23,6 +24,14 @@ public class TicketResponse {
 
     private String createdBy;
     private String assignedAgent;
+
+    private LocalDateTime responseDueAt;
+    private LocalDateTime resolutionDueAt;
+    private LocalDateTime firstRespondedAt;
+    private LocalDateTime resolvedAt;
+
+    private boolean responseOverdue;
+    private boolean resolutionOverdue;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
