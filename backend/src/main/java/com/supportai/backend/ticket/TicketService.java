@@ -4,6 +4,9 @@ import com.supportai.backend.department.Category;
 import com.supportai.backend.department.CategoryRepository;
 import com.supportai.backend.department.Department;
 import com.supportai.backend.department.DepartmentRepository;
+import com.supportai.backend.exception.BadRequestException;
+import com.supportai.backend.exception.ForbiddenException;
+import com.supportai.backend.exception.ResourceNotFoundException;
 import com.supportai.backend.notification.NotificationService;
 import com.supportai.backend.user.Role;
 import com.supportai.backend.user.User;
@@ -37,18 +40,24 @@ public class TicketService {
     ) {
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found"));
 
         Department department = departmentRepository
                 .findById(request.getDepartmentId())
-                .orElseThrow(() -> new RuntimeException("Department not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Department not found"));
 
         Category category = categoryRepository
                 .findById(request.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Category not found"));
 
-        if (!category.getDepartment().getId().equals(department.getId())) {
-            throw new RuntimeException(
+        if (!category.getDepartment()
+                .getId()
+                .equals(department.getId())) {
+
+            throw new BadRequestException(
                     "Category does not belong to the selected department"
             );
         }
@@ -80,7 +89,8 @@ public class TicketService {
                 )
                 .build();
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
 
         recordHistory(
                 savedTicket,
@@ -92,7 +102,8 @@ public class TicketService {
         notificationService.createNotification(
                 user,
                 "Ticket Created",
-                "Your ticket \"" + savedTicket.getTitle() + "\" was created successfully.",
+                "Your ticket \"" + savedTicket.getTitle()
+                        + "\" was created successfully.",
                 savedTicket.getId()
         );
 
@@ -116,10 +127,12 @@ public class TicketService {
     ) {
 
         Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Ticket not found"));
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found"));
 
         validateTicketAccess(ticket, user);
 
@@ -132,16 +145,24 @@ public class TicketService {
     ) {
 
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Ticket not found"));
 
         User agent = userRepository.findById(agentId)
-                .orElseThrow(() -> new RuntimeException("Agent not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Agent not found"));
 
         if (agent.getRole() != Role.SUPPORT_AGENT
                 && agent.getRole() != Role.ADMIN) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Selected user is not a support agent"
+            );
+        }
+
+        if (!agent.isEnabled()) {
+            throw new BadRequestException(
+                    "Selected support agent is disabled"
             );
         }
 
@@ -160,10 +181,13 @@ public class TicketService {
         String details;
 
         if (previousAgent == null) {
+
             details =
                     "Ticket assigned to "
                             + agent.getEmail();
+
         } else {
+
             details =
                     "Ticket reassigned from "
                             + previousAgent.getEmail()
@@ -196,13 +220,21 @@ public class TicketService {
     ) {
 
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Ticket not found"));
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found"));
 
         TicketStatus previousStatus =
                 ticket.getStatus();
+
+        if (previousStatus == status) {
+            throw new BadRequestException(
+                    "Ticket is already in status " + status
+            );
+        }
 
         ticket.setStatus(status);
 
@@ -217,10 +249,13 @@ public class TicketService {
         }
 
         if (status == TicketStatus.RESOLVED) {
+
             ticket.setResolvedAt(
                     LocalDateTime.now()
             );
+
         } else if (status != TicketStatus.CLOSED) {
+
             ticket.setResolvedAt(null);
         }
 
@@ -276,10 +311,49 @@ public class TicketService {
             String direction
     ) {
 
-        Sort.Direction sortDirection =
-                "asc".equalsIgnoreCase(direction)
-                        ? Sort.Direction.ASC
-                        : Sort.Direction.DESC;
+        if (page < 0) {
+            throw new BadRequestException(
+                    "Page number cannot be negative"
+            );
+        }
+
+        if (size < 1 || size > 100) {
+            throw new BadRequestException(
+                    "Page size must be between 1 and 100"
+            );
+        }
+
+        List<String> allowedSortFields =
+                List.of(
+                        "id",
+                        "createdAt",
+                        "updatedAt",
+                        "priority",
+                        "status"
+                );
+
+        if (!allowedSortFields.contains(sortBy)) {
+            throw new BadRequestException(
+                    "Invalid sort field"
+            );
+        }
+
+        Sort.Direction sortDirection;
+
+        if ("asc".equalsIgnoreCase(direction)) {
+
+            sortDirection = Sort.Direction.ASC;
+
+        } else if ("desc".equalsIgnoreCase(direction)) {
+
+            sortDirection = Sort.Direction.DESC;
+
+        } else {
+
+            throw new BadRequestException(
+                    "Sort direction must be asc or desc"
+            );
+        }
 
         Pageable pageable =
                 PageRequest.of(
@@ -351,10 +425,12 @@ public class TicketService {
     ) {
 
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Ticket not found"));
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found"));
 
         validateTicketAccess(ticket, user);
 
@@ -434,10 +510,12 @@ public class TicketService {
     ) {
 
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Ticket not found"));
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found"));
 
         validateTicketAccess(ticket, user);
 
@@ -454,10 +532,12 @@ public class TicketService {
     ) {
 
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Ticket not found"));
 
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found"));
 
         validateTicketAccess(ticket, user);
 
@@ -467,8 +547,12 @@ public class TicketService {
                 .map(history ->
                         TicketHistoryResponse.builder()
                                 .id(history.getId())
-                                .action(history.getAction())
-                                .details(history.getDetails())
+                                .action(
+                                        history.getAction()
+                                )
+                                .details(
+                                        history.getDetails()
+                                )
                                 .performedBy(
                                         history.getPerformedBy() != null
                                                 ? history.getPerformedBy()
@@ -509,7 +593,7 @@ public class TicketService {
                 && !isAssignedAgent
                 && !isAdmin) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You are not allowed to access this ticket"
             );
         }
@@ -548,6 +632,7 @@ public class TicketService {
         }
 
         if (ticket.getFirstRespondedAt() != null) {
+
             return ticket.getFirstRespondedAt()
                     .isAfter(
                             ticket.getResponseDueAt()
@@ -569,13 +654,16 @@ public class TicketService {
         }
 
         if (ticket.getResolvedAt() != null) {
+
             return ticket.getResolvedAt()
                     .isAfter(
                             ticket.getResolutionDueAt()
                     );
         }
 
-        if (ticket.getStatus() == TicketStatus.CLOSED) {
+        if (ticket.getStatus() == TicketStatus.CLOSED
+                || ticket.getStatus() == TicketStatus.CANCELLED) {
+
             return false;
         }
 

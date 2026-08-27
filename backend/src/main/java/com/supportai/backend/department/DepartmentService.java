@@ -1,5 +1,7 @@
 package com.supportai.backend.department;
 
+import com.supportai.backend.exception.ConflictException;
+import com.supportai.backend.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,24 +26,30 @@ public class DepartmentService {
             DepartmentRequest request
     ) {
 
-        departmentRepository.findByName(request.getName())
+        departmentRepository
+                .findByName(request.getName())
                 .ifPresent(department -> {
-                    throw new RuntimeException(
+                    throw new ConflictException(
                             "Department already exists"
                     );
                 });
 
-        Department department = Department.builder()
-                .name(request.getName())
-                .description(request.getDescription())
-                .active(
-                        request.getActive() == null
-                                || request.getActive()
-                )
-                .build();
+        Department department =
+                Department.builder()
+                        .name(request.getName())
+                        .description(
+                                request.getDescription()
+                        )
+                        .active(
+                                request.getActive() == null
+                                        || request.getActive()
+                        )
+                        .build();
 
         return mapDepartment(
-                departmentRepository.save(department)
+                departmentRepository.save(
+                        department
+                )
         );
     }
 
@@ -53,12 +61,15 @@ public class DepartmentService {
         Department department =
                 departmentRepository.findById(id)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Department not found"
                                 )
                         );
 
-        department.setName(request.getName());
+        department.setName(
+                request.getName()
+        );
+
         department.setDescription(
                 request.getDescription()
         );
@@ -70,7 +81,9 @@ public class DepartmentService {
         }
 
         return mapDepartment(
-                departmentRepository.save(department)
+                departmentRepository.save(
+                        department
+                )
         );
     }
 
@@ -86,6 +99,12 @@ public class DepartmentService {
             Long departmentId
     ) {
 
+        if (!departmentRepository.existsById(departmentId)) {
+            throw new ResourceNotFoundException(
+                    "Department not found"
+            );
+        }
+
         return categoryRepository
                 .findByDepartmentId(departmentId)
                 .stream()
@@ -99,25 +118,32 @@ public class DepartmentService {
 
         Department department =
                 departmentRepository
-                        .findById(request.getDepartmentId())
+                        .findById(
+                                request.getDepartmentId()
+                        )
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Department not found"
                                 )
                         );
 
-        Category category = Category.builder()
-                .name(request.getName())
-                .description(request.getDescription())
-                .department(department)
-                .active(
-                        request.getActive() == null
-                                || request.getActive()
-                )
-                .build();
+        Category category =
+                Category.builder()
+                        .name(request.getName())
+                        .description(
+                                request.getDescription()
+                        )
+                        .department(department)
+                        .active(
+                                request.getActive() == null
+                                        || request.getActive()
+                        )
+                        .build();
 
         return mapCategory(
-                categoryRepository.save(category)
+                categoryRepository.save(
+                        category
+                )
         );
     }
 
@@ -129,25 +155,33 @@ public class DepartmentService {
         Category category =
                 categoryRepository.findById(id)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Category not found"
                                 )
                         );
 
         Department department =
                 departmentRepository
-                        .findById(request.getDepartmentId())
+                        .findById(
+                                request.getDepartmentId()
+                        )
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Department not found"
                                 )
                         );
 
-        category.setName(request.getName());
+        category.setName(
+                request.getName()
+        );
+
         category.setDescription(
                 request.getDescription()
         );
-        category.setDepartment(department);
+
+        category.setDepartment(
+                department
+        );
 
         if (request.getActive() != null) {
             category.setActive(
@@ -156,7 +190,9 @@ public class DepartmentService {
         }
 
         return mapCategory(
-                categoryRepository.save(category)
+                categoryRepository.save(
+                        category
+                )
         );
     }
 
@@ -186,10 +222,12 @@ public class DepartmentService {
                 )
                 .active(category.isActive())
                 .departmentId(
-                        category.getDepartment().getId()
+                        category.getDepartment()
+                                .getId()
                 )
                 .departmentName(
-                        category.getDepartment().getName()
+                        category.getDepartment()
+                                .getName()
                 )
                 .build();
     }

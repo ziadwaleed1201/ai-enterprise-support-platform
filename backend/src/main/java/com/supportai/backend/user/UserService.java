@@ -1,5 +1,6 @@
 package com.supportai.backend.user;
 
+import com.supportai.backend.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,11 +20,15 @@ public class UserService {
                 .toList();
     }
 
-    public UserResponse getUserById(Long id) {
+    public UserResponse getUserById(
+            Long id
+    ) {
 
         User user = userRepository.findById(id)
                 .orElseThrow(
-                        () -> new RuntimeException("User not found")
+                        () -> new ResourceNotFoundException(
+                                "User not found"
+                        )
                 );
 
         return mapToResponse(user);
@@ -36,10 +41,14 @@ public class UserService {
 
         User user = userRepository.findById(id)
                 .orElseThrow(
-                        () -> new RuntimeException("User not found")
+                        () -> new ResourceNotFoundException(
+                                "User not found"
+                        )
                 );
 
-        user.setRole(request.getRole());
+        user.setRole(
+                request.getRole()
+        );
 
         return mapToResponse(
                 userRepository.save(user)
@@ -53,17 +62,23 @@ public class UserService {
 
         User user = userRepository.findById(id)
                 .orElseThrow(
-                        () -> new RuntimeException("User not found")
+                        () -> new ResourceNotFoundException(
+                                "User not found"
+                        )
                 );
 
-        user.setEnabled(request.getEnabled());
+        user.setEnabled(
+                request.getEnabled()
+        );
 
         return mapToResponse(
                 userRepository.save(user)
         );
     }
 
-    private UserResponse mapToResponse(User user) {
+    private UserResponse mapToResponse(
+            User user
+    ) {
 
         return UserResponse.builder()
                 .id(user.getId())

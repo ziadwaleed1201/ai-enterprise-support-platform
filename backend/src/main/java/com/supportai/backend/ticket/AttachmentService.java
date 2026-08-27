@@ -1,5 +1,8 @@
 package com.supportai.backend.ticket;
 
+import com.supportai.backend.exception.BadRequestException;
+import com.supportai.backend.exception.ForbiddenException;
+import com.supportai.backend.exception.ResourceNotFoundException;
 import com.supportai.backend.user.Role;
 import com.supportai.backend.user.User;
 import com.supportai.backend.user.UserRepository;
@@ -10,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,7 +31,9 @@ public class AttachmentService {
     private final UserRepository userRepository;
 
     private final Path uploadDirectory =
-            Paths.get("uploads").toAbsolutePath().normalize();
+            Paths.get("uploads")
+                    .toAbsolutePath()
+                    .normalize();
 
     public TicketAttachmentResponse uploadAttachment(
             Long ticketId,
@@ -35,32 +41,72 @@ public class AttachmentService {
             String userEmail
     ) {
 
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+        Ticket ticket =
+                ticketRepository.findById(ticketId)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "Ticket not found"
+                                )
+                        );
 
-        User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user =
+                userRepository.findByEmail(userEmail)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "User not found"
+                                )
+                        );
 
-        validateTicketAccess(ticket, user);
+        validateTicketAccess(
+                ticket,
+                user
+        );
 
         if (file.isEmpty()) {
-            throw new RuntimeException("File cannot be empty");
+            throw new BadRequestException(
+                    "File cannot be empty"
+            );
         }
 
         try {
-            Files.createDirectories(uploadDirectory);
 
-            String originalFileName = file.getOriginalFilename();
+            Files.createDirectories(
+                    uploadDirectory
+            );
 
-            if (originalFileName == null || originalFileName.isBlank()) {
-                originalFileName = "attachment";
+            String originalFileName =
+                    file.getOriginalFilename();
+
+            if (originalFileName == null
+                    || originalFileName.isBlank()) {
+
+                originalFileName =
+                        "attachment";
             }
 
+            String safeOriginalFileName =
+                    Path.of(originalFileName)
+                            .getFileName()
+                            .toString();
+
             String storedFileName =
-                    UUID.randomUUID() + "_" + originalFileName;
+                    UUID.randomUUID()
+                            + "_"
+                            + safeOriginalFileName;
 
             Path targetLocation =
-                    uploadDirectory.resolve(storedFileName);
+                    uploadDirectory
+                            .resolve(storedFileName)
+                            .normalize();
+
+            if (!targetLocation.startsWith(
+                    uploadDirectory
+            )) {
+
+                throw new BadRequestException(
+                        "Invalid file name"
+                );
+            }
 
             Files.copy(
                     file.getInputStream(),
@@ -72,32 +118,43 @@ public class AttachmentService {
                     TicketAttachment.builder()
                             .ticket(ticket)
                             .uploadedBy(user)
-                            .originalFileName(originalFileName)
-                            .storedFileName(storedFileName)
+                            .originalFileName(
+                                    safeOriginalFileName
+                            )
+                            .storedFileName(
+                                    storedFileName
+                            )
                             .contentType(
                                     file.getContentType() != null
                                             ? file.getContentType()
                                             : "application/octet-stream"
                             )
-                            .fileSize(file.getSize())
+                            .fileSize(
+                                    file.getSize()
+                            )
                             .build();
 
             TicketAttachment savedAttachment =
-                    ticketAttachmentRepository.save(attachment);
+                    ticketAttachmentRepository
+                            .save(attachment);
 
             recordHistory(
                     ticket,
                     user,
                     "ATTACHMENT_ADDED",
-                    "Attachment added: " + originalFileName
+                    "Attachment added: "
+                            + safeOriginalFileName
             );
 
-            return mapToResponse(savedAttachment);
+            return mapToResponse(
+                    savedAttachment
+            );
 
-        } catch (IOException e) {
+        } catch (IOException exception) {
+
             throw new RuntimeException(
                     "Failed to store attachment",
-                    e
+                    exception
             );
         }
     }
@@ -107,16 +164,31 @@ public class AttachmentService {
             String userEmail
     ) {
 
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+        Ticket ticket =
+                ticketRepository.findById(ticketId)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "Ticket not found"
+                                )
+                        );
 
-        User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user =
+                userRepository.findByEmail(userEmail)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "User not found"
+                                )
+                        );
 
-        validateTicketAccess(ticket, user);
+        validateTicketAccess(
+                ticket,
+                user
+        );
 
         return ticketAttachmentRepository
-                .findByTicketIdOrderByCreatedAtAsc(ticketId)
+                .findByTicketIdOrderByCreatedAtAsc(
+                        ticketId
+                )
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -128,42 +200,61 @@ public class AttachmentService {
     ) {
 
         TicketAttachment attachment =
-                ticketAttachmentRepository.findById(attachmentId)
+                ticketAttachmentRepository
+                        .findById(attachmentId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Attachment not found"
                                 )
                         );
 
-        User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user =
+                userRepository.findByEmail(userEmail)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "User not found"
+                                )
+                        );
 
         validateTicketAccess(
                 attachment.getTicket(),
                 user
         );
 
+        Path filePath =
+                uploadDirectory
+                        .resolve(
+                                attachment.getStoredFileName()
+                        )
+                        .normalize();
+
+        if (!filePath.startsWith(uploadDirectory)) {
+            throw new BadRequestException(
+                    "Invalid attachment path"
+            );
+        }
+
         try {
-            Path filePath =
-                    uploadDirectory.resolve(
-                            attachment.getStoredFileName()
-                    );
 
             Resource resource =
-                    new UrlResource(filePath.toUri());
+                    new UrlResource(
+                            filePath.toUri()
+                    );
 
-            if (!resource.exists()) {
-                throw new RuntimeException(
+            if (!resource.exists()
+                    || !resource.isReadable()) {
+
+                throw new ResourceNotFoundException(
                         "Attachment file not found"
                 );
             }
 
             return resource;
 
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "Failed to load attachment",
-                    e
+        } catch (MalformedURLException exception) {
+
+            throw new ResourceNotFoundException(
+                    "Attachment file not found"
             );
         }
     }
@@ -171,10 +262,11 @@ public class AttachmentService {
     public TicketAttachment getAttachmentMetadata(
             Long attachmentId
     ) {
+
         return ticketAttachmentRepository
                 .findById(attachmentId)
                 .orElseThrow(
-                        () -> new RuntimeException(
+                        () -> new ResourceNotFoundException(
                                 "Attachment not found"
                         )
                 );
@@ -185,7 +277,8 @@ public class AttachmentService {
             User user
     ) {
 
-        String userEmail = user.getEmail();
+        String userEmail =
+                user.getEmail();
 
         boolean isOwner =
                 ticket.getCreatedBy()
@@ -201,8 +294,11 @@ public class AttachmentService {
         boolean isAdmin =
                 user.getRole() == Role.ADMIN;
 
-        if (!isOwner && !isAssignedAgent && !isAdmin) {
-            throw new RuntimeException(
+        if (!isOwner
+                && !isAssignedAgent
+                && !isAdmin) {
+
+            throw new ForbiddenException(
                     "You are not allowed to access attachments for this ticket"
             );
         }
@@ -215,14 +311,17 @@ public class AttachmentService {
             String details
     ) {
 
-        TicketHistory history = TicketHistory.builder()
-                .ticket(ticket)
-                .performedBy(performedBy)
-                .action(action)
-                .details(details)
-                .build();
+        TicketHistory history =
+                TicketHistory.builder()
+                        .ticket(ticket)
+                        .performedBy(performedBy)
+                        .action(action)
+                        .details(details)
+                        .build();
 
-        ticketHistoryRepository.save(history);
+        ticketHistoryRepository.save(
+                history
+        );
     }
 
     private TicketAttachmentResponse mapToResponse(
@@ -241,7 +340,8 @@ public class AttachmentService {
                         attachment.getFileSize()
                 )
                 .uploadedBy(
-                        attachment.getUploadedBy().getEmail()
+                        attachment.getUploadedBy()
+                                .getEmail()
                 )
                 .createdAt(
                         attachment.getCreatedAt()

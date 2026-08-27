@@ -1,5 +1,8 @@
 package com.supportai.backend.auth;
 
+import com.supportai.backend.exception.BadRequestException;
+import com.supportai.backend.exception.ConflictException;
+import com.supportai.backend.exception.ForbiddenException;
 import com.supportai.backend.user.Role;
 import com.supportai.backend.user.User;
 import com.supportai.backend.user.UserRepository;
@@ -15,42 +18,75 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(
+            RegisterRequest request
+    ) {
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already registered");
+            throw new ConflictException(
+                    "Email already registered"
+            );
         }
 
         User user = User.builder()
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole() != null ? request.getRole() : Role.EMPLOYEE)
+                .password(
+                        passwordEncoder.encode(
+                                request.getPassword()
+                        )
+                )
+                .role(
+                        request.getRole() != null
+                                ? request.getRole()
+                                : Role.EMPLOYEE
+                )
                 .enabled(true)
                 .build();
 
         userRepository.save(user);
 
-        String token = jwtService.generateToken(user.getEmail());
+        String token =
+                jwtService.generateToken(
+                        user.getEmail()
+                );
 
         return new AuthResponse(token);
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(
+            LoginRequest request
+    ) {
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+        User user = userRepository
+                .findByEmail(request.getEmail())
+                .orElseThrow(
+                        () -> new BadRequestException(
+                                "Invalid email or password"
+                        )
+                );
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid email or password");
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                user.getPassword()
+        )) {
+
+            throw new BadRequestException(
+                    "Invalid email or password"
+            );
         }
 
         if (!user.isEnabled()) {
-            throw new RuntimeException("User account is disabled");
+            throw new ForbiddenException(
+                    "User account is disabled"
+            );
         }
 
-        String token = jwtService.generateToken(user.getEmail());
+        String token =
+                jwtService.generateToken(
+                        user.getEmail()
+                );
 
         return new AuthResponse(token);
     }

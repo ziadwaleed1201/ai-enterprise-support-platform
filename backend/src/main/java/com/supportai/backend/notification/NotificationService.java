@@ -1,5 +1,7 @@
 package com.supportai.backend.notification;
 
+import com.supportai.backend.exception.ForbiddenException;
+import com.supportai.backend.exception.ResourceNotFoundException;
 import com.supportai.backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,15 +21,18 @@ public class NotificationService {
             Long ticketId
     ) {
 
-        Notification notification = Notification.builder()
-                .user(user)
-                .title(title)
-                .message(message)
-                .ticketId(ticketId)
-                .read(false)
-                .build();
+        Notification notification =
+                Notification.builder()
+                        .user(user)
+                        .title(title)
+                        .message(message)
+                        .ticketId(ticketId)
+                        .read(false)
+                        .build();
 
-        notificationRepository.save(notification);
+        notificationRepository.save(
+                notification
+        );
     }
 
     public List<NotificationResponse> getMyNotifications(
@@ -35,7 +40,9 @@ public class NotificationService {
     ) {
 
         return notificationRepository
-                .findByUserEmailOrderByCreatedAtDesc(userEmail)
+                .findByUserEmailOrderByCreatedAtDesc(
+                        userEmail
+                )
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -46,7 +53,9 @@ public class NotificationService {
     ) {
 
         return notificationRepository
-                .countByUserEmailAndReadFalse(userEmail);
+                .countByUserEmailAndReadFalse(
+                        userEmail
+                );
     }
 
     public NotificationResponse markAsRead(
@@ -55,9 +64,10 @@ public class NotificationService {
     ) {
 
         Notification notification =
-                notificationRepository.findById(notificationId)
+                notificationRepository
+                        .findById(notificationId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Notification not found"
                                 )
                         );
@@ -66,7 +76,7 @@ public class NotificationService {
                 .getEmail()
                 .equals(userEmail)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You are not allowed to access this notification"
             );
         }
@@ -74,7 +84,9 @@ public class NotificationService {
         notification.setRead(true);
 
         return mapToResponse(
-                notificationRepository.save(notification)
+                notificationRepository.save(
+                        notification
+                )
         );
     }
 
@@ -87,8 +99,12 @@ public class NotificationService {
                 .title(notification.getTitle())
                 .message(notification.getMessage())
                 .read(notification.isRead())
-                .ticketId(notification.getTicketId())
-                .createdAt(notification.getCreatedAt())
+                .ticketId(
+                        notification.getTicketId()
+                )
+                .createdAt(
+                        notification.getCreatedAt()
+                )
                 .build();
     }
 }
