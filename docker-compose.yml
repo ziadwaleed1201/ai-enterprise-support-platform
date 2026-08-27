@@ -1,0 +1,55 @@
+services:
+
+  postgres:
+    image: postgres:18
+    container_name: supportai-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: supportai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - supportai_postgres_data:/var/lib/postgresql
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d supportai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: supportai-backend
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/supportai
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: 86400000
+
+      SERVER_PORT: 8080
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+volumes:
+  supportai_postgres_data:
