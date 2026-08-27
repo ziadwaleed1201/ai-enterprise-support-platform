@@ -3,6 +3,8 @@ package com.supportai.backend.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,6 +22,7 @@ public class GlobalExceptionHandler {
             ResourceNotFoundException exception,
             HttpServletRequest request
     ) {
+
         return buildResponse(
                 HttpStatus.NOT_FOUND,
                 exception.getMessage(),
@@ -33,9 +36,38 @@ public class GlobalExceptionHandler {
             ForbiddenException exception,
             HttpServletRequest request
     ) {
+
         return buildResponse(
                 HttpStatus.FORBIDDEN,
                 exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(
+            AccessDeniedException exception,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.FORBIDDEN,
+                "You are not authorized to perform this action",
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthentication(
+            AuthenticationException exception,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.UNAUTHORIZED,
+                "Authentication is required",
                 request.getRequestURI(),
                 null
         );
@@ -46,6 +78,7 @@ public class GlobalExceptionHandler {
             BadRequestException exception,
             HttpServletRequest request
     ) {
+
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
                 exception.getMessage(),
@@ -59,6 +92,7 @@ public class GlobalExceptionHandler {
             ConflictException exception,
             HttpServletRequest request
     ) {
+
         return buildResponse(
                 HttpStatus.CONFLICT,
                 exception.getMessage(),
@@ -72,6 +106,7 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException exception,
             HttpServletRequest request
     ) {
+
         Map<String, String> validationErrors =
                 new LinkedHashMap<>();
 
@@ -97,6 +132,7 @@ public class GlobalExceptionHandler {
             Exception exception,
             HttpServletRequest request
     ) {
+
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred",
@@ -111,6 +147,7 @@ public class GlobalExceptionHandler {
             String path,
             Map<String, String> validationErrors
     ) {
+
         ApiErrorResponse response =
                 ApiErrorResponse.builder()
                         .timestamp(LocalDateTime.now())
