@@ -22,25 +22,35 @@ public class AuthService {
             RegisterRequest request
     ) {
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String normalizedEmail =
+                request.getEmail()
+                        .trim()
+                        .toLowerCase();
+
+        if (userRepository.existsByEmail(normalizedEmail)) {
+
             throw new ConflictException(
                     "Email already registered"
             );
         }
 
         User user = User.builder()
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .email(request.getEmail())
+                .firstName(
+                        request.getFirstName().trim()
+                )
+                .lastName(
+                        request.getLastName().trim()
+                )
+                .email(
+                        normalizedEmail
+                )
                 .password(
                         passwordEncoder.encode(
                                 request.getPassword()
                         )
                 )
                 .role(
-                        request.getRole() != null
-                                ? request.getRole()
-                                : Role.EMPLOYEE
+                        Role.EMPLOYEE
                 )
                 .enabled(true)
                 .build();
@@ -59,13 +69,19 @@ public class AuthService {
             LoginRequest request
     ) {
 
-        User user = userRepository
-                .findByEmail(request.getEmail())
-                .orElseThrow(
-                        () -> new BadRequestException(
-                                "Invalid email or password"
-                        )
-                );
+        String normalizedEmail =
+                request.getEmail()
+                        .trim()
+                        .toLowerCase();
+
+        User user =
+                userRepository
+                        .findByEmail(normalizedEmail)
+                        .orElseThrow(
+                                () -> new BadRequestException(
+                                        "Invalid email or password"
+                                )
+                        );
 
         if (!passwordEncoder.matches(
                 request.getPassword(),
@@ -78,6 +94,7 @@ public class AuthService {
         }
 
         if (!user.isEnabled()) {
+
             throw new ForbiddenException(
                     "User account is disabled"
             );
