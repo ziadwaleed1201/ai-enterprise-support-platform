@@ -4,10 +4,16 @@ import com.supportai.backend.department.Category;
 import com.supportai.backend.department.CategoryRepository;
 import com.supportai.backend.department.Department;
 import com.supportai.backend.department.DepartmentRepository;
+import com.supportai.backend.notification.NotificationService;
 import com.supportai.backend.user.Role;
 import com.supportai.backend.user.User;
 import com.supportai.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,6 +29,7 @@ public class TicketService {
     private final CategoryRepository categoryRepository;
     private final TicketCommentRepository ticketCommentRepository;
     private final TicketHistoryRepository ticketHistoryRepository;
+    private final NotificationService notificationService;
 
     public TicketResponse createTicket(
             CreateTicketRequest request,
@@ -82,6 +89,13 @@ public class TicketService {
                 "Ticket created by " + user.getEmail()
         );
 
+        notificationService.createNotification(
+                user,
+                "Ticket Created",
+                "Your ticket \"" + savedTicket.getTitle() + "\" was created successfully.",
+                savedTicket.getId()
+        );
+
         return mapToResponse(savedTicket);
     }
 
@@ -89,7 +103,8 @@ public class TicketService {
             String userEmail
     ) {
 
-        return ticketRepository.findByCreatedByEmail(userEmail)
+        return ticketRepository
+                .findByCreatedByEmail(userEmail)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -130,7 +145,8 @@ public class TicketService {
             );
         }
 
-        User previousAgent = ticket.getAssignedAgent();
+        User previousAgent =
+                ticket.getAssignedAgent();
 
         ticket.setAssignedAgent(agent);
 
@@ -160,6 +176,14 @@ public class TicketService {
                 agent,
                 "TICKET_ASSIGNED",
                 details
+        );
+
+        notificationService.createNotification(
+                agent,
+                "Ticket Assigned",
+                "Ticket #" + savedTicket.getId()
+                        + " has been assigned to you.",
+                savedTicket.getId()
         );
 
         return mapToResponse(savedTicket);
@@ -213,6 +237,18 @@ public class TicketService {
                         + status
         );
 
+        notificationService.createNotification(
+                ticket.getCreatedBy(),
+                "Ticket Status Updated",
+                "Ticket #" + ticket.getId()
+                        + " status changed from "
+                        + previousStatus
+                        + " to "
+                        + status
+                        + ".",
+                ticket.getId()
+        );
+
         return mapToResponse(savedTicket);
     }
 
@@ -225,6 +261,87 @@ public class TicketService {
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    public TicketPageResponse searchTickets(
+            TicketStatus status,
+            TicketPriority priority,
+            Long departmentId,
+            String agentEmail,
+            String employeeEmail,
+            String search,
+            int page,
+            int size,
+            String sortBy,
+            String direction
+    ) {
+
+        Sort.Direction sortDirection =
+                "asc".equalsIgnoreCase(direction)
+                        ? Sort.Direction.ASC
+                        : Sort.Direction.DESC;
+
+        Pageable pageable =
+                PageRequest.of(
+                        page,
+                        size,
+                        Sort.by(
+                                sortDirection,
+                                sortBy
+                        )
+                );
+
+        Specification<Ticket> specification =
+                Specification
+                        .where(
+                                TicketSpecification
+                                        .hasStatus(status)
+                        )
+                        .and(
+                                TicketSpecification
+                                        .hasPriority(priority)
+                        )
+                        .and(
+                                TicketSpecification
+                                        .hasDepartment(departmentId)
+                        )
+                        .and(
+                                TicketSpecification
+                                        .assignedTo(agentEmail)
+                        )
+                        .and(
+                                TicketSpecification
+                                        .createdBy(employeeEmail)
+                        )
+                        .and(
+                                TicketSpecification
+                                        .containsSearchText(search)
+                        );
+
+        Page<Ticket> result =
+                ticketRepository.findAll(
+                        specification,
+                        pageable
+                );
+
+        return TicketPageResponse.builder()
+                .tickets(
+                        result.getContent()
+                                .stream()
+                                .map(this::mapToResponse)
+                                .toList()
+                )
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalElements(
+                        result.getTotalElements()
+                )
+                .totalPages(
+                        result.getTotalPages()
+                )
+                .first(result.isFirst())
+                .last(result.isLast())
+                .build();
     }
 
     public TicketCommentResponse addComment(
@@ -277,6 +394,34 @@ public class TicketService {
                 "Comment added by "
                         + user.getEmail()
         );
+
+        if (user.getRole() == Role.EMPLOYEE) {
+
+            if (ticket.getAssignedAgent() != null) {
+
+                notificationService.createNotification(
+                        ticket.getAssignedAgent(),
+                        "New Ticket Comment",
+                        "A new comment was added to ticket #"
+                                + ticket.getId()
+                                + " by "
+                                + user.getEmail()
+                                + ".",
+                        ticket.getId()
+                );
+            }
+
+        } else {
+
+            notificationService.createNotification(
+                    ticket.getCreatedBy(),
+                    "Support Reply",
+                    "A support agent replied to ticket #"
+                            + ticket.getId()
+                            + ".",
+                    ticket.getId()
+            );
+        }
 
         return mapCommentToResponse(
                 savedComment
@@ -375,13 +520,9 @@ public class TicketService {
     ) {
 
         return switch (priority) {
-
             case LOW -> 8;
-
             case MEDIUM -> 4;
-
             case HIGH -> 2;
-
             case CRITICAL -> 1;
         };
     }
@@ -391,13 +532,9 @@ public class TicketService {
     ) {
 
         return switch (priority) {
-
             case LOW -> 72;
-
             case MEDIUM -> 48;
-
             case HIGH -> 24;
-
             case CRITICAL -> 8;
         };
     }

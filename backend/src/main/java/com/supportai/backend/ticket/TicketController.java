@@ -52,6 +52,36 @@ public class TicketController {
         );
     }
 
+    @GetMapping("/search")
+    @PreAuthorize("hasAnyRole('SUPPORT_AGENT', 'ADMIN')")
+    public ResponseEntity<TicketPageResponse> searchTickets(
+            @RequestParam(required = false) TicketStatus status,
+            @RequestParam(required = false) TicketPriority priority,
+            @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) String agentEmail,
+            @RequestParam(required = false) String employeeEmail,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction
+    ) {
+        return ResponseEntity.ok(
+                ticketService.searchTickets(
+                        status,
+                        priority,
+                        departmentId,
+                        agentEmail,
+                        employeeEmail,
+                        search,
+                        page,
+                        size,
+                        sortBy,
+                        direction
+                )
+        );
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<TicketResponse> getTicketById(
             @PathVariable Long id,
