@@ -4,11 +4,13 @@ import com.supportai.backend.exception.ConflictException;
 import com.supportai.backend.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class DepartmentService {
 
     private final DepartmentRepository departmentRepository;
@@ -22,6 +24,7 @@ public class DepartmentService {
                 .toList();
     }
 
+    @Transactional
     public DepartmentResponse createDepartment(
             DepartmentRequest request
     ) {
@@ -53,6 +56,7 @@ public class DepartmentService {
         );
     }
 
+    @Transactional
     public DepartmentResponse updateDepartment(
             Long id,
             DepartmentRequest request
@@ -75,6 +79,7 @@ public class DepartmentService {
         );
 
         if (request.getActive() != null) {
+
             department.setActive(
                     request.getActive()
             );
@@ -99,19 +104,25 @@ public class DepartmentService {
             Long departmentId
     ) {
 
-        if (!departmentRepository.existsById(departmentId)) {
+        if (!departmentRepository.existsById(
+                departmentId
+        )) {
+
             throw new ResourceNotFoundException(
                     "Department not found"
             );
         }
 
         return categoryRepository
-                .findByDepartmentId(departmentId)
+                .findByDepartmentId(
+                        departmentId
+                )
                 .stream()
                 .map(this::mapCategory)
                 .toList();
     }
 
+    @Transactional
     public CategoryResponse createCategory(
             CategoryRequest request
     ) {
@@ -129,11 +140,15 @@ public class DepartmentService {
 
         Category category =
                 Category.builder()
-                        .name(request.getName())
+                        .name(
+                                request.getName()
+                        )
                         .description(
                                 request.getDescription()
                         )
-                        .department(department)
+                        .department(
+                                department
+                        )
                         .active(
                                 request.getActive() == null
                                         || request.getActive()
@@ -147,6 +162,7 @@ public class DepartmentService {
         );
     }
 
+    @Transactional
     public CategoryResponse updateCategory(
             Long id,
             CategoryRequest request
@@ -184,6 +200,7 @@ public class DepartmentService {
         );
 
         if (request.getActive() != null) {
+
             category.setActive(
                     request.getActive()
             );
@@ -201,12 +218,18 @@ public class DepartmentService {
     ) {
 
         return DepartmentResponse.builder()
-                .id(department.getId())
-                .name(department.getName())
+                .id(
+                        department.getId()
+                )
+                .name(
+                        department.getName()
+                )
                 .description(
                         department.getDescription()
                 )
-                .active(department.isActive())
+                .active(
+                        department.isActive()
+                )
                 .build();
     }
 
@@ -215,12 +238,18 @@ public class DepartmentService {
     ) {
 
         return CategoryResponse.builder()
-                .id(category.getId())
-                .name(category.getName())
+                .id(
+                        category.getId()
+                )
+                .name(
+                        category.getName()
+                )
                 .description(
                         category.getDescription()
                 )
-                .active(category.isActive())
+                .active(
+                        category.isActive()
+                )
                 .departmentId(
                         category.getDepartment()
                                 .getId()

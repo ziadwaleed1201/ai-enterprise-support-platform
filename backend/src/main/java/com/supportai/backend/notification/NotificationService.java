@@ -5,15 +5,18 @@ import com.supportai.backend.exception.ResourceNotFoundException;
 import com.supportai.backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
 
+    @Transactional
     public void createNotification(
             User user,
             String title,
@@ -58,6 +61,7 @@ public class NotificationService {
                 );
     }
 
+    @Transactional
     public NotificationResponse markAsRead(
             Long notificationId,
             String userEmail
@@ -83,10 +87,13 @@ public class NotificationService {
 
         notification.setRead(true);
 
-        return mapToResponse(
+        Notification savedNotification =
                 notificationRepository.save(
                         notification
-                )
+                );
+
+        return mapToResponse(
+                savedNotification
         );
     }
 

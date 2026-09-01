@@ -34,6 +34,20 @@ public class UserService {
         return mapToResponse(user);
     }
 
+    public UserResponse getCurrentUser(
+            String email
+    ) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(
+                        () -> new ResourceNotFoundException(
+                                "User not found"
+                        )
+                );
+
+        return mapToResponse(user);
+    }
+
     public UserResponse updateRole(
             Long id,
             UpdateUserRoleRequest request

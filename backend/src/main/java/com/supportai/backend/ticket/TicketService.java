@@ -18,12 +18,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class TicketService {
 
     private final TicketRepository ticketRepository;
@@ -34,6 +36,7 @@ public class TicketService {
     private final TicketHistoryRepository ticketHistoryRepository;
     private final NotificationService notificationService;
 
+@Transactional
     public TicketResponse createTicket(
             CreateTicketRequest request,
             String userEmail
@@ -138,7 +141,7 @@ public class TicketService {
 
         return mapToResponse(ticket);
     }
-
+@Transactional
     public TicketResponse assignTicket(
             Long ticketId,
             Long agentId
@@ -212,7 +215,7 @@ public class TicketService {
 
         return mapToResponse(savedTicket);
     }
-
+@Transactional
     public TicketResponse updateStatus(
             Long ticketId,
             TicketStatus status,
@@ -417,7 +420,7 @@ public class TicketService {
                 .last(result.isLast())
                 .build();
     }
-
+@Transactional
     public TicketCommentResponse addComment(
             Long ticketId,
             AddCommentRequest request,
@@ -568,36 +571,40 @@ public class TicketService {
     }
 
     private void validateTicketAccess(
-            Ticket ticket,
-            User user
-    ) {
+        Ticket ticket,
+        User user
+) {
 
-        String userEmail =
-                user.getEmail();
+    String userEmail =
+            user.getEmail();
 
-        boolean isOwner =
-                ticket.getCreatedBy()
-                        .getEmail()
-                        .equals(userEmail);
+    boolean isOwner =
+            ticket.getCreatedBy()
+                    .getEmail()
+                    .equals(userEmail);
 
-        boolean isAssignedAgent =
-                ticket.getAssignedAgent() != null
-                        && ticket.getAssignedAgent()
-                        .getEmail()
-                        .equals(userEmail);
+    boolean isAssignedAgent =
+            ticket.getAssignedAgent() != null
+                    && ticket.getAssignedAgent()
+                    .getEmail()
+                    .equals(userEmail);
 
-        boolean isAdmin =
-                user.getRole() == Role.ADMIN;
+    boolean isSupportAgent =
+            user.getRole() == Role.SUPPORT_AGENT;
 
-        if (!isOwner
-                && !isAssignedAgent
-                && !isAdmin) {
+    boolean isAdmin =
+            user.getRole() == Role.ADMIN;
 
-            throw new ForbiddenException(
-                    "You are not allowed to access this ticket"
-            );
-        }
+    if (!isOwner
+            && !isAssignedAgent
+            && !isSupportAgent
+            && !isAdmin) {
+
+        throw new ForbiddenException(
+                "You are not allowed to access this ticket"
+        );
     }
+}
 
     private long getResponseSlaHours(
             TicketPriority priority

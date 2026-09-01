@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class AttachmentService {
 
     private final TicketRepository ticketRepository;
@@ -35,6 +37,7 @@ public class AttachmentService {
                     .toAbsolutePath()
                     .normalize();
 
+    @Transactional
     public TicketAttachmentResponse uploadAttachment(
             Long ticketId,
             MultipartFile file,
@@ -273,36 +276,40 @@ public class AttachmentService {
     }
 
     private void validateTicketAccess(
-            Ticket ticket,
-            User user
-    ) {
+        Ticket ticket,
+        User user
+) {
 
-        String userEmail =
-                user.getEmail();
+    String userEmail =
+            user.getEmail();
 
-        boolean isOwner =
-                ticket.getCreatedBy()
-                        .getEmail()
-                        .equals(userEmail);
+    boolean isOwner =
+            ticket.getCreatedBy()
+                    .getEmail()
+                    .equals(userEmail);
 
-        boolean isAssignedAgent =
-                ticket.getAssignedAgent() != null
-                        && ticket.getAssignedAgent()
-                        .getEmail()
-                        .equals(userEmail);
+    boolean isAssignedAgent =
+            ticket.getAssignedAgent() != null
+                    && ticket.getAssignedAgent()
+                    .getEmail()
+                    .equals(userEmail);
 
-        boolean isAdmin =
-                user.getRole() == Role.ADMIN;
+    boolean isSupportAgent =
+            user.getRole() == Role.SUPPORT_AGENT;
 
-        if (!isOwner
-                && !isAssignedAgent
-                && !isAdmin) {
+    boolean isAdmin =
+            user.getRole() == Role.ADMIN;
 
-            throw new ForbiddenException(
-                    "You are not allowed to access attachments for this ticket"
-            );
-        }
+    if (!isOwner
+            && !isAssignedAgent
+            && !isSupportAgent
+            && !isAdmin) {
+
+        throw new ForbiddenException(
+                "You are not allowed to access attachments for this ticket"
+        );
     }
+}
 
     private void recordHistory(
             Ticket ticket,
